@@ -1,28 +1,40 @@
+// Copyright 2013 The Gorilla WebSocket Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package main
 
 import (
-    "fmt"
-
-    static "github.com/gin-contrib/static"
-	"github.com/gin-gonic/gin"
-	"gopkg.in/olahol/melody.v1"
+	"flag"
+	"log"
+	"net/http"
 )
 
-func main() {
-	r := gin.Default()
-	m := melody.New()
+var addr = flag.String("addr", ":8080", "http service address")
 
-	r.Use(static.Serve("/", static.LocalFile("../client", true)))
-	r.GET("/ws", func(c *gin.Context) {
-        fmt.Println("hello world")
-		m.HandleRequest(c.Writer, c.Request)
-	})
-
-	m.HandleMessage(func(s *melody.Session, msg []byte) {
-        fmt.Println("hello world 2")
-		m.Broadcast(msg)
-	})
-
-	r.Run(":5000")
+func serveHome(w http.ResponseWriter, r *http.Request) {
+	log.Println(r.URL)
+	if r.URL.Path != "/" {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	http.ServeFile(w, r, "home.html")
 }
 
+func main() {
+	flag.Parse()
+	hub := newHub()
+	go hub.run()
+	http.HandleFunc("/", serveHome)
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(hub, w, r)
+	})
+	err := http.ListenAndServe(*addr, nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
+}
